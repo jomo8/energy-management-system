@@ -134,6 +134,65 @@ def _notification_messages(current: pd.Series) -> list[str]:
     return notes
 
 
+def _build_shed_intervals(chart_df: pd.DataFrame, latest_ts: pd.Timestamp) -> pd.DataFrame:
+    """
+    Build contiguous time spans for load-shed highlights.
+
+    Yellow: non-essential loads shed (essential still active).
+    Red: all loads shed.
+    """
+    if chart_df.empty:
+        return pd.DataFrame(columns=["start", "end", "event"])
+
+    df = chart_df.sort_values("timestamp").copy()
+
+    def classify(row: pd.Series) -> str:
+        essential_connected = int(row.get("connected_essential_count", 0))
+        non_essential_connected = int(row.get("connected_non_essential_count", 0))
+        if essential_connected == 0 and non_essential_connected == 0:
+            return "all_shed"
+        if essential_connected > 0 and non_essential_connected == 0:
+            return "non_essential_shed"
+        return "normal"
+
+    df["shed_state"] = df.apply(classify, axis=1)
+    df["next_timestamp"] = df["timestamp"].shift(-1).fillna(latest_ts)
+
+    spans: list[dict] = []
+    current_state = None
+    current_start = None
+    current_end = None
+    for row in df.itertuples(index=False):
+        state = row.shed_state
+        start = row.timestamp
+        end = row.next_timestamp
+
+        if state == "normal":
+            if current_state in {"all_shed", "non_essential_shed"}:
+                spans.append({"start": current_start, "end": current_end, "event": current_state})
+                current_state = None
+                current_start = None
+                current_end = None
+            continue
+
+        if current_state is None:
+            current_state = state
+            current_start = start
+            current_end = end
+        elif state == current_state:
+            current_end = end
+        else:
+            spans.append({"start": current_start, "end": current_end, "event": current_state})
+            current_state = state
+            current_start = start
+            current_end = end
+
+    if current_state in {"all_shed", "non_essential_shed"}:
+        spans.append({"start": current_start, "end": current_end, "event": current_state})
+
+    return pd.DataFrame(spans)
+
+
 def main() -> None:
     st.set_page_config(page_title="Energy Management System Dashboard", layout="wide")
     st.title("Energy Management System Dashboard")
@@ -171,10 +230,8 @@ def main() -> None:
     st.subheader("Graph Time Window")
     window_options = {
         "1 Day": 1,
+        "3 Days": 3,
         "7 Days": 7,
-        "30 Days": 30,
-        "6 Months": 182,
-        "1 Year": 365,
     }
     selected_window = st.selectbox(
         "Select graph window",
@@ -191,8 +248,42 @@ def main() -> None:
 
     st.subheader(f"Load Profile ({selected_window})")
     load_profile = chart_window_df[["timestamp", "load_total_W"]].rename(columns={"load_total_W": "Load (W)"})
-    st.line_chart(load_profile.set_index("timestamp"))
-    st.caption("🔵 Load profile (total power consumption)")
+    shed_spans = _build_shed_intervals(chart_window_df, latest_ts=latest_ts)
+
+    load_line = (
+        alt.Chart(load_profile)
+        .mark_line(color="#1f77b4")
+        .encode(
+            x=alt.X("timestamp:T", title="Time"),
+            y=alt.Y("Load (W):Q", title="Load (W)"),
+            tooltip=["timestamp:T", alt.Tooltip("Load (W):Q", format=".2f")],
+        )
+        .properties(height=320)
+    )
+    if shed_spans.empty:
+        load_chart = load_line
+    else:
+        span_rects = (
+            alt.Chart(shed_spans)
+            .mark_rect(opacity=0.18)
+            .encode(
+                x=alt.X("start:T"),
+                x2=alt.X2("end:T"),
+                y=alt.value(0),
+                y2=alt.value(320),
+                color=alt.Color(
+                    "event:N",
+                    scale=alt.Scale(
+                        domain=["non_essential_shed", "all_shed"],
+                        range=["#ffd54f", "#ef5350"],
+                    ),
+                    legend=alt.Legend(title="Shed State"),
+                ),
+            )
+        )
+        load_chart = alt.layer(span_rects, load_line)
+    st.altair_chart(load_chart, use_container_width=True)
+    st.caption("🔵 Load profile | 🟡 Non-essential loads shed | 🔴 All loads shed")
 
     st.subheader(f"SoC vs Solar Generation ({selected_window})")
     chart_df = chart_window_df[["timestamp", "soc", "solar_ac_W"]].copy()
@@ -206,6 +297,7 @@ def main() -> None:
             y=alt.Y("soc_percent:Q", title="SoC (%)"),
             tooltip=["timestamp:T", alt.Tooltip("soc_percent:Q", format=".2f")],
         )
+        .properties(height=320)
     )
     solar_chart = (
         alt.Chart(chart_df)
@@ -216,9 +308,30 @@ def main() -> None:
             tooltip=["timestamp:T", alt.Tooltip("solar_ac_W:Q", format=".2f")],
         )
     )
-    layered = alt.layer(soc_chart, solar_chart).resolve_scale(y="independent")
+    if shed_spans.empty:
+        layered = alt.layer(soc_chart, solar_chart).resolve_scale(y="independent")
+    else:
+        span_rects_soc = (
+            alt.Chart(shed_spans)
+            .mark_rect(opacity=0.18)
+            .encode(
+                x=alt.X("start:T"),
+                x2=alt.X2("end:T"),
+                y=alt.value(0),
+                y2=alt.value(320),
+                color=alt.Color(
+                    "event:N",
+                    scale=alt.Scale(
+                        domain=["non_essential_shed", "all_shed"],
+                        range=["#ffd54f", "#ef5350"],
+                    ),
+                    legend=alt.Legend(title="Shed State"),
+                ),
+            )
+        )
+        layered = alt.layer(span_rects_soc, soc_chart, solar_chart).resolve_scale(y="independent")
     st.altair_chart(layered, use_container_width=True)
-    st.caption("🔵 SoC (%)    🟠 Solar generation (W)")
+    st.caption("🔵 SoC (%) | 🟠 Solar generation (W) | 🟡 Non-essential loads shed | 🔴 All loads shed")
 
 
 if __name__ == "__main__":
