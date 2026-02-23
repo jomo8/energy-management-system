@@ -8,4 +8,4 @@ matplotlib>=3.8
 pybamm>=24.1
 scipy
 streamlit
-altair>=5.0
+altair==4.2.2
