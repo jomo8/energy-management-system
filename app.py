@@ -134,65 +134,6 @@ def _notification_messages(current: pd.Series) -> list[str]:
     return notes
 
 
-def _build_shed_intervals(chart_df: pd.DataFrame, latest_ts: pd.Timestamp) -> pd.DataFrame:
-    """
-    Build contiguous time spans for load-shed highlights.
-
-    Yellow: non-essential loads shed (essential still active).
-    Red: all loads shed.
-    """
-    if chart_df.empty:
-        return pd.DataFrame(columns=["start", "end", "event"])
-
-    df = chart_df.sort_values("timestamp").copy()
-
-    def classify(row: pd.Series) -> str:
-        essential_connected = int(row.get("connected_essential_count", 0))
-        non_essential_connected = int(row.get("connected_non_essential_count", 0))
-        if essential_connected == 0 and non_essential_connected == 0:
-            return "all_shed"
-        if essential_connected > 0 and non_essential_connected == 0:
-            return "non_essential_shed"
-        return "normal"
-
-    df["shed_state"] = df.apply(classify, axis=1)
-    df["next_timestamp"] = df["timestamp"].shift(-1).fillna(latest_ts)
-
-    spans: list[dict] = []
-    current_state = None
-    current_start = None
-    current_end = None
-    for row in df.itertuples(index=False):
-        state = row.shed_state
-        start = row.timestamp
-        end = row.next_timestamp
-
-        if state == "normal":
-            if current_state in {"all_shed", "non_essential_shed"}:
-                spans.append({"start": current_start, "end": current_end, "event": current_state})
-                current_state = None
-                current_start = None
-                current_end = None
-            continue
-
-        if current_state is None:
-            current_state = state
-            current_start = start
-            current_end = end
-        elif state == current_state:
-            current_end = end
-        else:
-            spans.append({"start": current_start, "end": current_end, "event": current_state})
-            current_state = state
-            current_start = start
-            current_end = end
-
-    if current_state in {"all_shed", "non_essential_shed"}:
-        spans.append({"start": current_start, "end": current_end, "event": current_state})
-
-    return pd.DataFrame(spans)
-
-
 def main() -> None:
     st.set_page_config(page_title="Energy Management System Dashboard", layout="wide")
     st.title("Energy Management System Dashboard")
