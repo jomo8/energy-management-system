@@ -1,0 +1,11 @@
+requests
+pytz
+timezonefinder
+pvlib>=0.10
+numpy>=1.26
+pandas>=2.1
+matplotlib>=3.8
+pybamm>=24.1
+scipy
+streamlit
+altair>=5.0
