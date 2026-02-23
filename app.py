@@ -77,9 +77,11 @@ def run_dashboard_simulation(config_path: str) -> tuple[pd.DataFrame, pd.DataFra
     ems = EnergyManagementSystem(battery=battery, solar=solar, load_mgr=load_mgr, config=config)
 
     sim_cfg = config["simulation"]
-    start_index = int(sim_cfg.get("start_index", 0))
+    configured_start_index = int(sim_cfg.get("start_index", 0))
     dt_s = float(sim_cfg.get("dt_seconds", 900))
     end_index = len(weather)
+    one_year_steps = int((365 * 24 * 3600) / max(dt_s, 1.0))
+    start_index = max(configured_start_index, end_index - one_year_steps)
 
     rows: list[dict] = []
     weather_rows: list[dict] = []
