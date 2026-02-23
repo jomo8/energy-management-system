@@ -80,7 +80,7 @@ def run_dashboard_simulation(config_path: str) -> tuple[pd.DataFrame, pd.DataFra
     configured_start_index = int(sim_cfg.get("start_index", 0))
     dt_s = float(sim_cfg.get("dt_seconds", 900))
     end_index = len(weather)
-    one_year_steps = int((2 * 24 * 3600) / max(dt_s, 1.0))
+    one_year_steps = int((1 * 24 * 3600) / max(dt_s, 1.0))
     start_index = max(configured_start_index, end_index - one_year_steps)
 
     rows: list[dict] = []
