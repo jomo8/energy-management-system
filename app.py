@@ -169,6 +169,7 @@ def main() -> None:
     last_24h = status_df.tail(96).copy()
     load_profile = last_24h[["timestamp", "load_total_W"]].rename(columns={"load_total_W": "Load (W)"})
     st.line_chart(load_profile.set_index("timestamp"))
+    st.caption("🔵 Load profile (total power consumption)")
 
     st.subheader("SoC vs Solar Generation Over Time")
     chart_df = status_df[["timestamp", "soc", "solar_ac_W"]].copy()
@@ -194,6 +195,7 @@ def main() -> None:
     )
     layered = alt.layer(soc_chart, solar_chart).resolve_scale(y="independent")
     st.altair_chart(layered, use_container_width=True)
+    st.caption("🔵 SoC (%)    🟠 Solar generation (W)")
 
 
 if __name__ == "__main__":
