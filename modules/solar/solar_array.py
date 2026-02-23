@@ -100,11 +100,23 @@ class SolarArray:
         )
 
         iam = pvlib.iam.ashrae(solar_position["zenith"]).fillna(0.0)
-        effective_irradiance = float(poa["poa_global"].iloc[0] * iam.iloc[0])
+        poa_irr = float(poa["poa_global"].iloc[0])
+        effective_irradiance = float(poa_irr * iam.iloc[0])
+        cell_temp = float(temp_cell.iloc[0])
+
+        # Nighttime / very low irradiance guard to avoid divide-by-zero in pvlib internals.
+        if effective_irradiance <= 1e-6:
+            return {
+                "dc_power_W": 0.0,
+                "ac_power_W": 0.0,
+                "cell_temp_C": cell_temp,
+                "poa_irradiance": poa_irr,
+                "inverter_efficiency": self._inverter_efficiency_curve(0.0),
+            }
 
         il, i0, rs, rsh, nnsvth = pvlib.pvsystem.calcparams_desoto(
             effective_irradiance=effective_irradiance,
-            temp_cell=float(temp_cell.iloc[0]),
+            temp_cell=cell_temp,
             alpha_sc=self.module_params["alpha_sc"],
             a_ref=self.module_params["a_ref"],
             I_L_ref=self.module_params["I_L_ref"],
@@ -123,8 +135,8 @@ class SolarArray:
         return {
             "dc_power_W": array_dc_power_w,
             "ac_power_W": array_ac_power_w,
-            "cell_temp_C": float(temp_cell.iloc[0]),
-            "poa_irradiance": float(poa["poa_global"].iloc[0]),
+            "cell_temp_C": cell_temp,
+            "poa_irradiance": poa_irr,
             "inverter_efficiency": inv_eff,
         }
 
