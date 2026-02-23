@@ -19,6 +19,8 @@ from modules.utils.time_utils import parse_timestamp
 from modules.utils.weather import load_weather_data
 from simulation import load_configuration
 
+alt.data_transformers.disable_max_rows()
+
 
 def _build_soc(config: dict) -> StateOfCharge:
     battery_cfg = config["battery"]
@@ -76,9 +78,8 @@ def run_dashboard_simulation(config_path: str) -> tuple[pd.DataFrame, pd.DataFra
 
     sim_cfg = config["simulation"]
     start_index = int(sim_cfg.get("start_index", 0))
-    num_steps = int(sim_cfg.get("num_steps", 288))
     dt_s = float(sim_cfg.get("dt_seconds", 900))
-    end_index = min(start_index + num_steps, len(weather))
+    end_index = len(weather)
 
     rows: list[dict] = []
     weather_rows: list[dict] = []
@@ -165,13 +166,12 @@ def main() -> None:
     for message in _notification_messages(current):
         st.info(message)
 
-    st.subheader("24 Hour Load Profile")
-    last_24h = status_df.tail(96).copy()
-    load_profile = last_24h[["timestamp", "load_total_W"]].rename(columns={"load_total_W": "Load (W)"})
+    st.subheader("Load Profile Over Full Dataset")
+    load_profile = status_df[["timestamp", "load_total_W"]].rename(columns={"load_total_W": "Load (W)"})
     st.line_chart(load_profile.set_index("timestamp"))
-    st.caption("🔵 Load profile (total power consumption)")
+    st.caption("🔵 Load profile (total power consumption) across full timeline")
 
-    st.subheader("SoC vs Solar Generation Over Time")
+    st.subheader("SoC vs Solar Generation Over Full Dataset")
     chart_df = status_df[["timestamp", "soc", "solar_ac_W"]].copy()
     chart_df["soc_percent"] = chart_df["soc"] * 100.0
 
