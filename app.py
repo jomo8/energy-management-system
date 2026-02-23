@@ -174,7 +174,7 @@ def main() -> None:
         "3 Day": 3,
         "7 Day": 7,
     }
-ad    if "selected_window" not in st.session_state:
+    if "selected_window" not in st.session_state:
         st.session_state.selected_window = "1 Day"
 
     b1, b2, b3 = st.columns(3)
