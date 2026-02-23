@@ -166,13 +166,34 @@ def main() -> None:
     for message in _notification_messages(current):
         st.info(message)
 
-    st.subheader("Load Profile Over Full Dataset")
-    load_profile = status_df[["timestamp", "load_total_W"]].rename(columns={"load_total_W": "Load (W)"})
-    st.line_chart(load_profile.set_index("timestamp"))
-    st.caption("🔵 Load profile (total power consumption) across full timeline")
+    st.subheader("Graph Time Window")
+    window_options = {
+        "1 Day": 1,
+        "7 Days": 7,
+        "30 Days": 30,
+        "6 Months": 182,
+        "1 Year": 365,
+    }
+    selected_window = st.selectbox(
+        "Select graph window",
+        options=list(window_options.keys()),
+        index=0,
+    )
 
-    st.subheader("SoC vs Solar Generation Over Full Dataset")
-    chart_df = status_df[["timestamp", "soc", "solar_ac_W"]].copy()
+    window_days = window_options[selected_window]
+    latest_ts = status_df["timestamp"].max()
+    window_start = latest_ts - pd.Timedelta(days=window_days)
+    chart_window_df = status_df[status_df["timestamp"] >= window_start].copy()
+    if chart_window_df.empty:
+        chart_window_df = status_df.copy()
+
+    st.subheader(f"Load Profile ({selected_window})")
+    load_profile = chart_window_df[["timestamp", "load_total_W"]].rename(columns={"load_total_W": "Load (W)"})
+    st.line_chart(load_profile.set_index("timestamp"))
+    st.caption("🔵 Load profile (total power consumption)")
+
+    st.subheader(f"SoC vs Solar Generation ({selected_window})")
+    chart_df = chart_window_df[["timestamp", "soc", "solar_ac_W"]].copy()
     chart_df["soc_percent"] = chart_df["soc"] * 100.0
 
     soc_chart = (
